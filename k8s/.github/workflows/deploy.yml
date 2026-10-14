@@ -1,0 +1,53 @@
+
+name: Deploy NGINX and MongoDB
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "k8s/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Requires a self-hosted GitHub Actions runner
+    # that can access your running Minikube cluster.
+    runs-on: [self-hosted, Windows, X64]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Check Kubernetes connection
+        run: kubectl cluster-info
+
+      - name: Validate Kubernetes manifests
+        shell: pwsh
+        run: |
+          kubectl apply --dry-run=client -f k8s/namespace.yaml
+          kubectl apply --dry-run=client -f k8s/nginx.yaml
+          kubectl apply --dry-run=client -f k8s/mongodb.yaml
+
+      - name: Deploy namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      - name: Deploy NGINX
+        run: kubectl apply -f k8s/nginx.yaml
+
+      - name: Deploy MongoDB
+        run: kubectl apply -f k8s/mongodb.yaml
+
+      - name: Wait for NGINX rollout
+        run: kubectl rollout status deployment/nginx -n webapp --timeout=180s
+
+      - name: Wait for MongoDB rollout
+        run: kubectl rollout status statefulset/mongodb -n webapp --timeout=180s
+
+      - name: Verify deployments
+        run: |
+          kubectl get deployments,statefulsets,pods,services,pvc -n webapp
